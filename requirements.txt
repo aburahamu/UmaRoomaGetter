@@ -1,0 +1,8 @@
+numpy
+opencv-python
+pandas
+pillow
+pywin32
+pygetwindow
+pytk
+easyocr
