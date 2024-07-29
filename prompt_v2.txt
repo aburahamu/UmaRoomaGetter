@@ -1,0 +1,218 @@
+あなたはPythonプログラマーです。
+下記の仕様を満たすコードを書いてください。
+完成したコードは再評価し、必要な修正があれば修正してから提示してください。
+必要な条件は下記の通りです。
+
+■要旨
+・Pythonで画像判定と文字抽出を継続して繰り返すアプリケーションを作成する
+・必要に応じてコードを増減させて良い。
+・出来るだけ簡潔なコードになるよう努める。
+
+■アプリケーションのプログラム構造
+・必要モジュールのインポート
+・前処理
+・メインループ
+　└監視対象アプリのウィンドウ取得
+　└情報消去ボタン
+　　└データフレーム初期化
+　└レース情報表示ラベル
+　└着順情報表示ラベル
+　└情報登録ボタン
+　　└データ出力
+　└フレーム画像表示ラベル
+　└監視対象アプリのスクリーンショット取得
+　　└フレーム画像表示ラベルを上書き
+　　└1着画像を探す
+　　　└レース情報の画像切り抜き
+　　　　└レース情報の文字抽出
+　　　└切り出した画像から文字抽出
+　　　└切り出した画像から顔判定
+　　　└切り出した画像からランク判定
+
+■前処理
+・csvファイル「results.csv」が存在しなければ作成する。
+
+・フォルダ「images/positions」内の全てのpng画像ファイルを辞書型の変数「positions」にcv2のimread()を用いてcv2.IMREAD_GRAYSCALEで格納する。各画像のkeyは拡張子を除いたファイル名の値が採用される。
+　例）position01.pngの場合、keyは「position01」になる。
+
+・フォルダ「images/faces」内の全てのpng画像ファイルを辞書型の変数「faces」にcv2のimread()を用いてcv2.IMREAD_GRAYSCALEで格納する。各画像のkeyは拡張子を除いたファイル名の値が採用される。
+　例）specialweek_normal.pngの場合、keyは「specialweek_normal」になる。
+
+・フォルダ「images/ranks」内の全てのpng画像ファイルを辞書型の変数「ranks」にcv2のimread()を用いてcv2.IMREAD_GRAYSCALEで格納する。各画像のkeyは拡張子を除いたファイル名の値が採用される。
+　例）ud5.pngの場合、keyは「ud5」になる。
+
+・フォルダ「images/weathers」内の全てのpng画像ファイルを辞書型の変数「weathers」にcv2のimread()を用いてcv2.IMREAD_GRAYSCALEで格納する。各画像のkeyは拡張子を除いたファイル名の値が採用される。
+　例）sunny.pngの場合、keyは「sunny」になる。
+
+・フォルダ「images/timezones」内の全てのpng画像ファイルを辞書型の変数「timezones」にcv2のimread()を用いてcv2.IMREAD_GRAYSCALEで格納する。各画像のkeyは拡張子を除いたファイル名の値が採用される。
+　例）night.pngの場合、keyは「night」になる。
+
+・pygetwindowを用いて名称が「umamusume」のウィンドウを探して変数「window_app」に格納する。
+
+・列名「uuid, create, class, name, place, ground, range, type, course, weather, condition, timezone」を持つ空のデータフレーム「df_race_zero」を作成する
+・pandasのデータフレーム「df_raceinfo」をdf_race_zeroで初期化する
+・csvファイル「raceinfo.csv」の中身が0行であれば、df_raceのcolumnsをカンマ区切りでrace.csvの1行目に挿入する。
+
+・列名「uuid, race_id, create, position、name、rank、frame_no、player、plan、time、popularity」を持つ空のデータフレーム「df_ranking_zero」を作成する
+・pandasのデータフレーム「df_ranking」をdf_zeroで初期化する
+・csvファイル「results.csv」の中身が0行であれば、df_rankingのcolumnsをカンマ区切りでresults.csvの1行目に挿入する。
+
+・boolean型の変数「exist_position1」をFalseで初期化する
+・boolean型の変数「acquired_raceinfo」をFalseで初期化する範囲
+・boolean型の変数「judeing_positions」をFalseで初期化する
+・cv2の画像データが入る変数「frame」を空の画像で初期化する
+
+・tkinterを用いてウィンドウ「window_app」を作成する。ウィンドウサイズは幅300pxで縦が500px。左上の座標はwindow_appの右端に10px加えた値に表示する。
+・window_appにボタン「btn_delete」を追加する。表示文字は「消去」で、押されると関数「delete_df」を呼び出す。
+・window_appにラベル「lbl_raceinfo」を追加。表示される文字はデータフレーム「df_race」の値。
+・window_appにラベル「lbl_ranking」を追加。表示される文字はデータフレーム「df_ranking」の値。
+・window_appにボタン「btn_register」を追加する。表示文字は「登録」で、押されると関数「regist_result」を呼び出す。
+・window_appにラベル「lbl_frames」を追加する。このラベルにはcv2で読み込まれた画像が格納されている変数「frame」を表示する。
+
+■メインループ
+・「if __name__ == '__main__':」で始める
+・window_appをmainloop()する
+・csvファイル「results.csv」を保存して閉じる
+・print(f"プログラム終了")を実行する
+
+■監視対象アプリのウィンドウを取得する関数「get_app_window」
+・pygetwindowを用いて名称が「umamusume」のウィンドウを探して変数「window_app」に格納する。
+
+■データフレーム初期化用の関数「delete_df」
+・引数は無い
+・処理開始時にprint(f"データフレーム初期化")を実行する
+・df_raceinfoをdf_race_zeroで上書きする。成否をprint()する。
+・df_rankingをdf_ranking_zeroで上書きする。成否をprint()する。
+・exist_position1をFalseにする
+・acquired_raceinfoをFalseにする
+・judeing_positionsをFalseにする
+・戻り値はTrueを返す
+
+■レース情報表示ラベル「lbl_raceinfo」の機能
+・df_raceinfoのデータをテーブル形式で全て表示する
+
+■着順情報表示ラベル「lbl_ranking」の機能
+・df_rankingの列「position」の値を昇順にソートしてデータをテーブル形式で全て表示する
+
+■情報登録ボタン
+・csvファイル「raceinfo.csv」の最後の行に、df_rankingのcolumnsを除く全て行を出力する
+・csvファイル「results.csv」の最後の行に、df_rankingのcolumnsを除く全て行を出力する
+・関数「delete_df」を呼び出す
+
+■フレーム画像表示ラベル「lbl_frames」の機能
+・cv2で作成された画像が格納されている変数「frame」の画像をアスペクト比を維持して幅480pxでラベルの中央に表示する
+
+■監視対象アプリのスクリーンショット取得用の関数「get_screen」
+・この関数はmainloop()によって常時呼び出される
+・1秒間に最大60回呼び出される
+・window_appのスクリーンショットを取得しcv2.IMREAD_GRAYSCALEで変数「frame」に格納する。
+・df_rankingのposition列に値が「position01」のレコードが無ければ関数「judge_position01」を呼び出す。引数としてframeを渡す。
+
+■1着画像を探す関数「judge_position01」
+・引数で「frame」を受け取る
+・exist_position1がFalseであれば「print(f"1着画像の判定開始")」を実行する。
+・exist_position1がFalseであれば、frameの画像内に「positions」のkeyが「position01」のvalueが含まれているかをcv2.matchTemplateを用いて判定する。含まれていればexist_position1をTrueにする。
+・acquired_raceinfoがFalseであれば、関数「judge_raceinfo」を呼び出す。引数として「frame」を渡す。
+・acquired_raceinfoがTrueかつ、exist_position1がTrueであれば、関数「judge_position」を呼び出す。品数として「frame」を渡す。
+
+■レース情報の画像切り抜き用関数「judge_raceinfo」
+・引数で「frame」を受け取る。
+「print(f"レース情報判定開始")」を実行する。
+・frameの高さ40%の位置から高さ50%までの位置を画像として切り出す。幅はframeと同じ値で良い。切り出した画像を変数「img_raceinfo」に格納する。
+・Thleadingを用いて関数「get_raceinfo」を呼び出す。引数としてimg_raceinfoを渡す。
+
+■レース情報の文字抽出「get_raceinfo」
+・引数で「img_raceinfo」を受け取る。
+・指定言語は「ja」でeasyocrを用いてimg_raceinfoから文字列を抽出し、結果をlist型の配列「ocr_results」に格納する。
+・
+・uuid.uuid4()を用いてuuidを生成し、結果を変数「text_uuid」に格納する。
+・df_raceinfoに以下の列を持つレコードを挿入する。
+＜レコード＞
+・uuid：text_uuid
+・create：書式が「yyyy-MM-dd HH:mm:ss」な現在の日時　※日本時間
+・class：ocr_resultsの0番目の値
+・name：ocr_resultsの1番目の値
+・place：ocr_resultsの2番目の値
+・ground：ocr_resultsの3番目の値
+・range：ocr_resultsの4番目の値
+・type：ocr_resultsの5番目の値
+・course：ocr_resultsの6番目の値
+・weather：
+・condition：ocr_resultsの7番目の値
+・timezone：
+
+■
+
+・辞書型の変数「positions」のkey全て抽出し、df_rankingの列「position」にそのkeyと同じ値がなければ、そのkey値と同じ名称のサブプロセスを作成する。
+・各サブプロセスで関数「judge_position」を呼び出す。引数としてframeとサブプロセス名と同じkey値を持つpositionのkey値とvalue値を1組渡す。
+　例1）1つめのサブプロセスにはframeとpositionの1つめのkeyとvalueを渡す。
+　例2）2つめのサブプロセスにはframeとpositionの2つめのkeyとvalueを渡す。
+
+■着順画像の位置を判定する関数「judge_position」
+・引数で「frame」と「position」を受け取る。
+・positionからkey値とvalue値をそれぞれ取得し変数「position_key」と「position_value」に格納する
+・frameの画像内にposition_valueを含むかをcv2.matchTemplateを用いて判定する。
+・position_valueがframe内に含まれる場合は、position_valueを発見した位置のX座標とY座標を取得し、それらを変数「x_stt」と「y_stt」に格納する。
+　└y_sttをframeの高さの5%に等しい数値だけ減算する
+　└y_sttにframeの高さの10%に等しい数値を加えた値を、整数型の変数「y_end」に格納する
+　└frame画像の幅と同じ値を持つ整数型の変数「x_end」を宣言する
+　└frame画像から、左上のX座標がx_sttでY座標がy_sttの位置から、右下のX座標がx_endでY座標がy_endの位置までを切り取り、変数「img_result」に格納する。
+　└サブプロセスを3つ作成する。
+　└1つめのサブプロセスで関数「get_text」を呼び出す。引数としてimg_resultとposition_keyを渡す。
+　└2つめのサブプロセスで関数「get_name」を呼び出す。引数としてimg_resultとposition_keyを渡す。
+　└3つめのサブプロセスで関数「get_rank」を呼び出す。引数としてimg_resultとposition_keyを渡す。
+
+■切り出した画像から着順情報の文字を抽出する関数「get_text」
+・引数で「img_result」と「position」を受け取る
+・指定言語は「ja」でeasyocrを用いてimg_resultから文字列を抽出し、結果をlist型の配列「ocr_results」に格納する
+・text_pyocrが1文字以上あれば関数「insert_text」を呼び出す。引数としてpositionとtext_orcを渡す。
+
+■着順情報の文字をデータフレームに格納する関数「add_text」
+・引数で「text_position」と「ocr_results」を受け取る
+・df_rankingの列positionにtext_positionと同じ値を持つレコードが無ければレコードを追加し各列に下記パターンで値を入れる。
+・df_rankingの列positionにtext_positionと同じ値を持つレコードがあれば、そのレコードの各列に下記パターンで値で上書きする。
+　＜パターン＞
+　create：現在の日時　※書式は「yyyy-MM-dd HH:mm:ss」
+　position：text_positionの値
+　frame_no：ocr_resultsの1番目の値
+　player：ocr_resultsの2番目の値
+　plan：ocr_resultsの3番目の値
+　time：ocr_resultsの4番目の値
+　popularity：ocr_resultsの5番目の値
+
+■切り出した画像から顔判定する関数「get_name」
+・引数で「img_result」と「position」を受け取る。
+・文字列変数「face_name」を宣言し、空の値で初期化する。
+・辞書型の変数「faces」のlenと同じ数のサブプロセスを作成する。各サブプロセスの名称はfacesのkey値と同じにする。
+・各サブプロセスで関数「judge_face」を呼び出す。引数としてimg_resultとpositionとサブプロセスの名称を渡す。
+
+■顔判定をする関数「judge_face」
+・引数で「img」と「position」と「face_name」を受け取る。
+・imgの画像内にface_nameと一致するkeyであるfacesのvalue画像が含まれるかcv2.matchTemplateを用いて判定する。
+・画像を検出した場合は関数「add_face」を呼び出す。引数としてpositionとface_nameを渡す。
+
+■顔判定の結果をデータフレームに格納する関数「add_face」
+・引数で「text_position」と「face_name」を受け取る。
+・df_rankingの列positionにtext_positionと同じ値を持つレコードが無ければレコードを追加し各列に下記パターンで値を入れる。
+・df_rankingの列positionにtext_positionと同じ値を持つレコードがあれば、そのレコードの各列に下記パターンで値で上書きする。
+　＜パターン＞
+　name：face_nameの値
+
+■切り出した画像からランク判定する関数「get_rank」
+・引数で「img_result」と「position」を受け取る
+・辞書型の変数「ranks」のlenと同じ数のサブプロセスを作成する。各サブプロセスの名称はranksのkey値と同じにする。
+・各サブプロセスで関数「judge_face」を呼び出す。引数としてimg_resultとpositionとサブプロセスの名称を渡す。
+
+■ランク判定をする関数「judge_rank」
+・引数で「img」と「position」と「rank_name」を受け取る。
+・imgの画像内にrank_nameと一致するkeyであるranksのvalue画像が含まれるかcv2.matchTemplateを用いて判定する。
+・画像を検出した場合は関数「add_rank」を呼び出す。引数としてpositionとrank_nameを渡す。
+
+■ランク判定の結果をデータフレームに格納する関数「add_rank」
+・引数で「text_position」と「rank_name」を受け取る。
+・df_rankingの列positionにtext_positionと同じ値を持つレコードが無ければレコードを追加し各列に下記パターンで値を入れる。
+・df_rankingの列positionにtext_positionと同じ値を持つレコードがあれば、そのレコードの各列に下記パターンで値で上書きする。
+　＜パターン＞
+　rank：rank_nameの値
+
+
