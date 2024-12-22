@@ -4,289 +4,267 @@ import pygetwindow as gw
 import easyocr
 import tkinter as tk
 from datetime import datetime
-from multiprocessing import Process, freeze_support, Manager
+from multiprocessing import freeze_support, Manager
 from PIL import Image, ImageTk, ImageGrab
 import os
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
+from multiprocessing import Process
 
 # 対象アプリ名
 app_title = "umamusume"
+
 # レース情報のCSVファイル名
 infos_file_name = "race_infos.csv"
+
 # 着順情報のCSVファイル名
-results_file_name = "race_results"
+results_file_name = "race_results.csv"
+
 # 各種画像ファイルのパス
 images_folder_path = "images"
 
-## データフレームをクリアする関数
-def delete_df():
-    uuid = ""
-    df_ranking = df_rank_zero.copy()
-    df_raceinfo = df_race_zero.copy()
-    # 結果ウィンドウの情報も初期化
-    lbl_ranking.config(text=df_ranking.to_string())
-    lbl_raceinfo.config(text=df_raceinfo.to_string())
-    return True
+# グローバル変数の初期化
+uuid = ""
+df_race_zero = pd.DataFrame(columns=['create', 'uuid', 'race_name', 'condition', 'season', 'weather', 'timezone'])
+df_raceinfo = df_race_zero.copy()
+df_rank_zero = pd.DataFrame(columns=['create', 'race_id', 'position', 'name', 'rank', 'frame_no', 'player', 'plan', 'time', 'popularity'])
+df_ranking = df_rank_zero.copy()
 
-## 抽出結果をCSVとして保存する関数
+# 画像ディレクトリからデータを読み込む関数
+def load_images(folder_name):
+    return {os.path.splitext(f)[0]: cv2.imread(os.path.join(images_folder_path, folder_name, f), cv2.IMREAD_GRAYSCALE) 
+            for f in os.listdir(os.path.join(images_folder_path, folder_name))}
+
+# 初期化処理
+positions = load_images('positions')
+race_grades = load_images('race_grades')
+race_names = load_images('race_names')
+race_seasons = load_images('race_seasons')
+race_places = load_images('race_places')
+race_surfaces = load_images('race_surfaces')
+race_distances = load_images('race_distances')
+race_directions = load_images('race_directions')
+race_weathers = load_images('race_weathers')
+race_conditions = load_images('race_conditions')
+race_timezones = load_images('race_timezones')
+chara_faces = load_images('chara_faces')
+chara_ranks = load_images('chara_ranks')
+chara_nums = load_images('chara_nums')
+chara_plans = load_images('chara_plans')
+
+# データフレームをクリアする関数
+def delete_df():
+    global df_ranking, df_raceinfo
+    # レース情報を初期化
+    df_raceinfo = df_race_zero.copy()
+    # 着順情報を初期化
+    df_ranking = df_rank_zero.copy()
+    # Tkinterのラベルをリフレッシュ
+    refresh_labels()
+
+# Tkinterのラベルをリフレッシュする関数
+def refresh_labels():
+    # 集計したレースの情報を上書き
+    lbl_raceinfo.config(text=df_raceinfo.to_string())
+    # 集計した着順の情報を上書き
+    lbl_ranking.config(text=df_ranking.to_string())
+
+# 抽出結果をCSVとして保存する関数
 def regist_result():
-    # データフレームの中身をCSVファイルに追加
+    global df_ranking, df_raceinfo  
+    # レース情報を上書き
     df_raceinfo.to_csv(infos_file_name, mode='a', header=False, index=False)
+    # 着順情報を上書き
     df_ranking.to_csv(results_file_name, mode='a', header=False, index=False)
-    # 既存のデータフレームを初期化
+    # データフレームを初期化
     delete_df()
 
-## 画像内の文字列を取得する関数
+# 画像内の文字列を取得する関数
 def get_text(img_result, position):
     reader = easyocr.Reader(['ja'])
     result = reader.readtext(img_result)
-    text_easyocr = ' '.join([res[1] for res in result])
-    # 文字が取れた場合の処理
-    if len(text_easyocr) > 0:
-        # 取得した文字列をデータフレームに上書きする関数を呼び出す
+    text_easyocr = ' '.join(res[1] for res in result)
+
+    if text_easyocr:
         add_text(position, text_easyocr)
 
-## 取得した文字列をデータフレームに上書きする関数
+# 取得した文字列をデータフレームに上書きする関数
 def add_text(text_position, text_easyocr):
-    # 渡された文字列を分割
+    global df_ranking
     result = text_easyocr.split()
-    # 結果の要素数を取得
-    result_length = len(result)
-    # resultの各要素を変数に格納
-    frame_no = result[0] if result_length > 0 else "unknown"
-    player_name = result[1] if result_length > 1 else "unknown"
-    plan_name = result[2] if result_length > 2 else "unknown"
-    time_str = result[3] if result_length > 3 else "unknown"
-    popularity = result[4] if result_length > 4 else "unknown"
+    frame_no, player_name, plan_name, time_str, popularity = ["unknown"] * 5  # デフォルト値
 
-    # n着の情報が入っていなければ処理する
-    if text_position not in df_ranking['position'].values:
-        # 着順情報のデータフレームに着順情報を追加する
-        df_ranking = df_ranking.append({
-            'create': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'position': text_position,
-            'frame_no': frame_no,
-            'player': player_name,
-            'plan': plan_name,
-            'time': time_str,
-            'popularity': popularity
-        }, ignore_index=True)
-    # n着の情報が入っていれば処理する
+    for i in range(min(len(result), 5)):  # 最大5項目まで取得
+        locals()[['frame_no', 'player_name', 'plan_name', 'time_str', 'popularity'][i]] = result[i]
+
+    update_dataframe(df_ranking, text_position, {
+        'create': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'position': text_position,
+        'frame_no': frame_no,
+        'player': player_name,
+        'plan': plan_name,
+        'time': time_str,
+        'popularity': popularity
+    })
+
+def update_rankDF(dataframe, position, new_data):
+    global df_ranking
+    if position not in dataframe['position'].values:
+        df_ranking = dataframe.append(new_data, ignore_index=True)
     else:
-        # 同じ着順の各データを上書きする
-        df_ranking.loc[df_ranking['position'] == text_position, ['frame_no', 'player', 'plan', 'time', 'popularity']] = \
-            [text_position, frame_no, player_name, plan_name, time_str, popularity]
+        dataframe.loc[dataframe['position'] == position, list(new_data.keys())] = list(new_data.values())
 
-## キャラクター名を判定する関数
-def get_name(img_result, position):
-    # 顔画像の数だけ顔判定処理を呼び出す
-    for face_name, face_value in faces.items():
-        with ThreadPoolExecutor(max_workers=1, thread_name_prefix="judge_faces") as executor:
-            results = list(executor.map(judge_face, img_result, position, face_name))
+def update_raceDF(dataframe, position, new_data):
+    global df_ranking
+    if position not in dataframe['position'].values:
+        df_ranking = dataframe.append(new_data, ignore_index=True)
+    else:
+        dataframe.loc[dataframe['position'] == position, list(new_data.keys())] = list(new_data.values())
 
-## キャラクター画像との一致を判定する関数
+# キャラクター名を判定する関数
+def get_chara_name(img_result, position):
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        for face_name in chara_faces.keys():
+            executor.submit(judge_face, img_result, position, face_name)
+
+# キャラクター画像との一致を判定する関数
 def judge_face(img, position, face_name):
-    # 渡された顔画像が画像内にあるかを判定する
-    result = cv2.matchTemplate(img, faces[face_name], cv2.TM_CCOEFF_NORMED)
-    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
-    # 一致率が高ければ処理する
-    if max_val > 0.9:
-        # n着のキャラクター名を上書きする関数を呼び出す
-        add_face(position, face_name)
+    match_template_and_add(img, position, face_name, chara_faces[face_name], 0.9, add_chara_name)
 
-## キャラクター名をデータフレームに上書きする関数
-def add_face(text_position, face_name):
-    # n着の情報がデータフレーム内になければ作る
-    if text_position not in df_ranking['position'].values:
-        df_ranking = df_ranking.append({
-            'create': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'position': text_position,
-            'name': face_name
-        }, ignore_index=True)
-    # n着の情報がデータフレーム内にあればキャラクター名を上書きする
-    else:
-        df_ranking.loc[df_ranking['position'] == text_position, 'name'] = face_name
+def match_template_and_add(img, position, name, template_img, threshold, add_function):
+    result = cv2.matchTemplate(img, template_img, cv2.TM_CCOEFF_NORMED)
+    max_val = np.max(result)
+    
+    if max_val > threshold:
+        add_function(position, name)
 
-def get_rank(img_result, position):
-    for rank_name, rank_value in ranks.items():
-        Process(target=judge_rank, args=(img_result, position, rank_name, ranks)).start()
+# キャラクター名をデータフレームに上書きする関数
+def add_chara_name(text_position, face_name):
+    update_dataframe(df_ranking, text_position, {'name': face_name})
+
+def get_chara_rank(img_result, position):
+    with ThreadPoolExecutor() as executor:
+        for rank_name in chara_ranks.keys():
+            executor.submit(judge_rank, img_result, position, rank_name)
 
 def judge_rank(img, position, rank_name):
-    res = cv2.matchTemplate(img, ranks[rank_name], cv2.TM_CCOEFF_NORMED)
-    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
-    if max_val > 0.8:
-        add_rank(position, rank_name)
+    match_template_and_add(img, position, rank_name, chara_ranks[rank_name], 0.8, add_rank)
 
 def add_rank(text_position, rank_name):
-    if text_position not in df_ranking['position'].values:
-        df_ranking = df_ranking.append({
-            'create': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'position': text_position,
-            'rank': rank_name
-        }, ignore_index=True)
-    else:
-        df_ranking.loc[df_ranking['position'] == text_position, 'rank'] = rank_name
+    update_rankDF(df_ranking, text_position, {'rank': rank_name})
 
-## 着順情報を読み取る関数を呼び出す関数
+# 着順の画像を探して、あればその行を画像として切り取ってキャラ情報の取得関数を呼び出す
 def judge_position(frame, position_key, position_value):
-    # n着の画像があるかを判定
-    res = cv2.matchTemplate(frame, position_value, cv2.TM_CCOEFF_NORMED)
-    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
-    # n着の画像があれば画像を切り出して他の情報を読み取る関数を呼び出す
+    result = cv2.matchTemplate(frame, position_value, cv2.TM_CCOEFF_NORMED)
+    max_val = np.max(result)
+    
     if max_val > 0.8:
-        x_stt, y_stt = max_loc
+        x_stt, y_stt = np.unravel_index(np.argmax(result), result.shape)        
         y_stt -= int(frame.shape[0] * 0.05)
         y_end = y_stt + int(frame.shape[0] * 0.10)
-        x_end = frame.shape[1]
-        # 画像の切り出し
-        img_result = frame[y_stt:y_end, x_stt:x_end]
-        # 文字列の取り出し
-        Process(target=get_text, args=(img_result, position_key)).start()
-        # キャラ名の判定
-        Process(target=get_name, args=(img_result, position_key)).start()
-        # キャラランクの判定
-        Process(target=get_rank, args=(img_result, position_key)).start()
+        img_result = frame[y_stt:y_end, x_stt:]
+        execute_multiple_processes(img_result, position_key)
 
-## レース情報を判定しデータフレームに入れる関数
+# 着順で切り取られた画像から、キャラ名などの情報を取得する関数を呼び出す
+def execute_multiple_processes(img_result, position_key):
+    processes = [
+        Process(target=get_chara_name, args=(img_result, position_key)),
+        Process(target=get_chara_rank, args=(img_result, position_key)),
+        Process(target=get_chara_num, args=(img_result, position_key)),
+        Process(target=get_chara_plan, args=(img_result, position_key))
+    ]
+    for process in processes:
+        process.start()
+
 def judge_race_info(frame):
-    if len(uuid) == 0:
-        # レースの固有IDを生成
-        uuid = ""
-        # レース情報の画像範囲を設定
-        x_stt, y_stt = 0
-        y_stt -= int(frame.shape[0] * 0.4)
+    if not uuid:
+        x_stt, y_stt = 0, int(frame.shape[0] * 0.4)
         y_end = y_stt + int(frame.shape[0] * 0.5)
-        x_end = frame.shape[1]
-        # レース情報の画像範囲を切り取り
-        img_result = frame[y_stt:y_end, x_stt:x_end]
-        # レース名
-        Process(target=get_rank, args=(img_result)).start()
-        # 馬場状態
-        Process(target=get_rank, args=(img_result)).start()
-        # 季節
-        Process(target=get_rank, args=(img_result)).start()
-        # 天候
-        Process(target=get_rank, args=(img_result)).start()
-        # 時間帯
-        Process(target=get_rank, args=(img_result)).start()
+        img_result = frame[y_stt:y_end, x_stt:]
 
-## アプリウィンドウをキャプチャする関数
-########################################################################################################
+        processes = [
+            Process(target=get_race_grade, args=(img_result)),
+            Process(target=get_race_name, args=(img_result)),
+            Process(target=get_race_season, args=(img_result)),
+            Process(target=get_race_place, args=(img_result)),
+            Process(target=get_race_surface, args=(img_result)),
+            Process(target=get_race_distance, args=(img_result)),
+            Process(target=get_race_direction, args=(img_result)),
+            Process(target=get_race_weather, args=(img_result)),
+            Process(target=get_race_condition, args=(img_result)),
+            Process(target=get_race_timezone, args=(img_result))
+        ]
+        
+        for process in processes:
+            process.start()
+
 def get_screen():
-    # ゲームウィンドウを取得
-    window_app = gw.getWindowsWithTitle(app_title)[0]
-    # ウィンドウ範囲を切り取り
-    bbox = (window_app.left, window_app.top, window_app.right, window_app.bottom)
-    # 切り取ったゲーム画面をグレースケールに変換
-    frame = cv2.cvtColor(np.array(ImageGrab.grab(bbox)), cv2.COLOR_BGR2GRAY)
-    # ステータスウィンドウのキャプチャ結果を書き換え
-    lbl_frames.config(image=ImageTk.PhotoImage(image=Image.fromarray(frame)))
-    # 着順結果のファイル名を順番に参照
-    for key in positions.keys():
-        # n着のデータが取れていなければ判定させる
-        if key not in df_ranking['position'].values:
-            with ThreadPoolExecutor(max_workers=1, thread_name_prefix="judge_position") as executor:
-                results = list(executor.map(judge_position, frame, key, positions[key]))
-    # レース情報のデータが取れていなければ判定させる
-    if key not in df_raceinfo['race_name'].values:
-            with ThreadPoolExecutor(max_workers=4, thread_name_prefix="judge_race_info") as executor:
-                results = list(executor.map(judge_race_info, frame))
-########################################################################################################
+    try:
+        window_app = gw.getWindowsWithTitle(app_title)[0]
+    except Exception as e:
+        print(f"アプリが見つからなくなりました")
 
-## メイン処理
-########################################################################################################
+    # モニターに合わせてbboxを補正
+    bbox = (window_app.left, window_app.top, window_app.right, window_app.bottom)
+    frame = cv2.cvtColor(np.array(ImageGrab.grab(all_screens=True, bbox = bbox)), cv2.COLOR_BGR2GRAY)
+
+    global img_tk
+    original_width, original_height = frame.shape[1], frame.shape[0]
+    label_width = root.winfo_width()
+    aspect_ratio = original_height / original_width
+    new_width = label_width
+    new_height = int(new_width * aspect_ratio)
+    resized_frame = cv2.resize(frame, (new_width, new_height))
+    img_tk = ImageTk.PhotoImage(image=Image.fromarray(resized_frame))
+    lbl_frames.config(image=img_tk)
+    lbl_frames.image = img_tk
+    root.update()
+    
+    for key in positions.keys():
+        if key not in df_ranking['position'].values:
+            judge_position(frame, key, positions[key])
+    
+    if key not in df_raceinfo['race_name'].values:
+        judge_race_info(frame)
+
+# 出力用のCSVファイルが無ければ作る関数
+def initialize_csv_files():
+    for filename, headers in [(results_file_name, 'create,race_id,position,name,rank,frame_no,player,plan,time,popularity\n'),
+                              (infos_file_name, 'create,uuid,race_name,condition,season,weather,timezone\n')]:
+        if not os.path.exists(filename):
+            with open(filename, 'w') as f:
+                f.write(headers)
+
+# デフォルト処理
 if __name__ == '__main__':
     print("[UMA_ROOMA_GETTER]")
-    ### 前処理
     freeze_support()
+    initialize_csv_files()
 
-    # レース結果を保存するCSVファイルを準備
-    if not os.path.exists(results_file_name):
-        with open(results_file_name, 'w') as f:
-            if os.path.getsize(results_file_name) == 0:
-                f.write('create,race_id,position,name,rank,frame_no,player,plan,time,popularity\n')
+    try:
+        window_app = gw.getWindowsWithTitle(app_title)[0]
+    except Exception as e:
+        print(f"アプリが見つかりません")
 
-    # レース情報を保存するCSVファイルを準備
-    if not os.path.exists(infos_file_name):
-        with open(infos_file_name, 'w') as f:
-            if os.path.getsize(infos_file_name) == 0:
-                f.write('create,uuid,race_name,condition,season,weather,timezone\n')
-
-    # レースの固有ID
-    global uuid
-    uuid =  ""
-
-    ## 判定用画像をオブジェクト化
-    # キャラ顔
-    global faces
-    path_faces = os.path.join(images_folder_path, 'faces')
-    faces = {os.path.splitext(f)[0]: cv2.imread(os.path.join(path_faces, f), cv2.IMREAD_GRAYSCALE) for f in os.listdir(path_faces)}
-    # 着順
-    global positions
-    path_positions = os.path.join(images_folder_path, 'positions')
-    positions = {os.path.splitext(f)[0]: cv2.imread(os.path.join(path_positions, f), cv2.IMREAD_GRAYSCALE) for f in os.listdir(path_positions)}
-    # ステータスランク
-    global ranks
-    path_ranks = os.path.join(images_folder_path, 'ranks')
-    ranks = {os.path.splitext(f)[0]: cv2.imread(os.path.join(path_ranks, f), cv2.IMREAD_GRAYSCALE) for f in os.listdir(path_ranks)}
-    # 馬場状態
-    global conditions
-    path_conditions = os.path.join(images_folder_path, 'conditions')
-    conditions = {os.path.splitext(f)[0]: cv2.imread(os.path.join(path_conditions,f ), cv2.IMREAD_GRAYSCALE) for f in os.listdir(path_conditions)}
-    # 季節
-    global seasons
-    path_seasons = os.path.join(images_folder_path, 'seasons')
-    seasons = {os.path.splitext(f)[0]: cv2.imread(os.path.join(path_seasons, f), cv2.IMREAD_GRAYSCALE) for f in os.listdir(path_seasons)}
-    # 天候
-    global weathers
-    path_weathers = os.path.join(images_folder_path, 'weathers')
-    weathers = {os.path.splitext(f)[0]: cv2.imread(os.path.join(path_weathers,f), cv2.IMREAD_GRAYSCALE) for f in os.listdir(path_weathers)}
-    # 時間帯
-    global timezones
-    path_timezones = os.path.join(images_folder_path, 'timezones')
-    timezones = {os.path.splitext(f)[0]: cv2.imread(os.path.join(path_timezones, f), cv2.IMREAD_GRAYSCALE) for f in os.listdir(path_timezones)}
-
-    ## 着順用データフレーム
-    global df_rank_zero
-    df_rank_zero = pd.DataFrame(columns=['create', 'race_id', 'position', 'name', 'rank', 'frame_no', 'player', 'plan', 'time', 'popularity'])
-    global df_ranking
-    df_ranking = df_rank_zero.copy()
-
-    ## レース情報用データフレーム
-    global df_race_zero
-    df_race_zero = pd.DataFrame(columns=['create', 'uuid', 'race_name', 'condition', 'season', 'weather', 'timezone'])
-    global df_raceinfo
-    df_raceinfo = df_race_zero.copy()
-
-    ## tkinterウィンドウの設定
     root = tk.Tk()
-    ## ゲーム画面を取得
-    window_app = gw.getWindowsWithTitle(app_title)[0]
-    ## 結果表示画面のサイズ設定
-    root.geometry(f'300x{window_app.height}+{window_app.right+10}+{window_app.top}')
-    ## レース情報の表示用ラベルを定義
-    global lbl_raceinfo
+    root.geometry(f'300x{window_app.height-35}+{window_app.right+5}+{window_app.top}')
+
     lbl_raceinfo = tk.Label(root, text=df_raceinfo.to_string())
     lbl_raceinfo.pack()
-    ## 着順情報の表示用ラベルを定義
-    global lbl_ranking
+
     lbl_ranking = tk.Label(root, text=df_ranking.to_string()) 
     lbl_ranking.pack()
-    ## 取得データの登録ボタンを定義
-    btn_register = tk.Button(root, text='登録', command=lambda: regist_result())
+
+    btn_register = tk.Button(root, text='登録', command=regist_result)
     btn_register.pack()
-    ## 取得データの消去ボタンを定義
-    btn_delete = tk.Button(root, text='消去', command=lambda: delete_df())
+
+    btn_delete = tk.Button(root, text='消去', command=delete_df)
     btn_delete.pack()
-    ## アプリ画面のフレーム表示用領域を定義
-    global lbl_frames
+
     lbl_frames = tk.Label(root)
     lbl_frames.pack()
-    print("設定完了")
 
-    ## 関数get_screen()を60分の1秒ごとに呼び出す
+    print("設定完了")
     root.after(1000 // 60, get_screen)
     root.mainloop()
     print("プログラム終了")
-########################################################################################################
