@@ -38,7 +38,7 @@ race_thresholds = {
 
 # 着順情報を判定する際の一致率ボーダー
 chara_thresholds = {
-    'name': 0.93, 'rank': 0.95, 'frame_no': 0.93, 'plan': 0.85
+    'name': 0.9, 'rank': 0.95, 'frame_no': 0.92, 'plan': 0.85
 }
 
 # スレッドロック用の変数
@@ -96,11 +96,12 @@ class App:
         # ウマ娘のアプリが見つからなければ終了
         try:
             window_app = gw.getWindowsWithTitle(APP_TITLE)[0]
+            # window_app.resize(514, 924)
             self.root = root
             self.is_running = True
             self.running = True
             self.counter = 0
-            self.root.geometry(f'300x{window_app.height-35}+{window_app.right+5}+{window_app.top}')
+            self.root.geometry(f'300x886+{window_app.right+5}+{window_app.top}')
 
             global race_uuid
             race_uuid = ''
@@ -217,9 +218,13 @@ class App:
 
     ## 画像の一致を判定する関数
     def match_and_add_rank(self, img, position, typ, key, img_temp, threshold):
-        result = cv2.matchTemplate(img, img_temp, cv2.TM_CCOEFF_NORMED)
+        img_temp_new = self.get_new_template(img_temp)
+        result = cv2.matchTemplate(img, img_temp_new, cv2.TM_CCOEFF_NORMED)
         max_val = np.max(result)
+        # if typ == "name":
+        #     print(f"[rank]【{typ}】{key} = {format(max_val, '.2f')}")
         if max_val > threshold:
+            # print(f"[rank]【{typ}】{key} = {format(max_val, '.2f')}")
             self.update_rankDF(position, {typ: key})
     
     ## 着順に関する情報を判定させるスレッドを作る関数
@@ -229,7 +234,23 @@ class App:
             if type_key in chara_dict:
                 for key in chara_dict[type_key].keys():
                     threshold = chara_thresholds.get(type_key, 0.9)    # デフォルト値は0.9
-                    executor.submit(self.match_and_add_rank, img, position, type_key, key, chara_dict[type_key][key], threshold)
+                    img_origin = img
+                    img_temp = chara_dict[type_key][key]
+                    # 切り取る範囲を算出
+                    if type_key == "frame_no":
+                        ## 切り取った画像の確認用
+                        # cv2.imshow('img', img_origin)
+                        # cv2.waitKey(0)
+                        # cv2.destroyAllWindows()
+                        height, width = img_origin.shape
+                        x_start = int(width * 0.30)
+                        x_end = int(width * 0.40)
+                        img_origin = img_origin[:, x_start:x_end]
+                        ## 切り取った画像の確認用
+                        # cv2.imshow('img_origin', img_origin)
+                        # cv2.waitKey(0)
+                        # cv2.destroyAllWindows()
+                    executor.submit(self.match_and_add_rank, img_origin, position, type_key, key, img_temp, threshold)
 
     ## 取得する情報の種類を判定用スレッドに渡す関数
     def analysis_chara_data(self, img, key):
@@ -279,7 +300,8 @@ class App:
     
     ## 一致する画像が含まれるかを判定する関数
     def match_and_add_race(self, img, typ, key, img_temp, threshold):
-        result = cv2.matchTemplate(img, img_temp, cv2.TM_CCOEFF_NORMED)
+        img_temp_new = self.get_new_template(img_temp)
+        result = cv2.matchTemplate(img, img_temp_new, cv2.TM_CCOEFF_NORMED)
         max_val = np.max(result)
         if max_val > threshold:
             self.update_raceDF({typ: key})
@@ -325,6 +347,11 @@ class App:
     ###################################################################################################
     ### ゲーム画面を取得するブロック
     ###################################################################################################
+    def get_new_template(self, img_old):
+        """ゲームウィンドウの幅に応じてテンプレート画像のサイズを変更する"""
+        img_temp_new = cv2.resize(img_old, None, fx=zoom_ratio, fy=zoom_ratio, interpolation=cv2.INTER_CUBIC)
+        return img_temp_new
+
     def get_img_thumbnail(self, frame):
         """ウィジェット用のサムネイル画像を作成する関数"""
         original_width, original_height = frame.shape[1], frame.shape[0]
@@ -336,6 +363,7 @@ class App:
         return ImageTk.PhotoImage(image=Image.fromarray(resized_frame))
 
     def get_screen(self):
+        """ゲーム画面のスクショを取得して情報の判定処理をさせる関数"""
         if self.running:
             self.counter += 1
             # print(f"Function called {self.counter} times", end='\r')
@@ -345,12 +373,17 @@ class App:
                 window_app = gw.getWindowsWithTitle(APP_TITLE)[0]
                 bbox = (window_app.left, window_app.top, window_app.right, window_app.bottom)
                 frame = cv2.cvtColor(np.array(ImageGrab.grab(all_screens=True, bbox=bbox)), cv2.COLOR_BGR2GRAY)
-
+                
                 ## ゲーム画面のサムネイルを作る
                 # img_tk = self.get_img_thumbnail(frame)
                 # self.lbl_frames.config(image=img_tk)
                 # self.lbl_frames.image = img_tk
                 # self.root.update()
+
+                ## 画面の比率を覚えておく
+                # キャプチャ時のウィンドウ幅が500pxになるサイズを基準にしている
+                global zoom_ratio
+                zoom_ratio = window_app.width / 514 
 
                 # 情報の取得要否フラグを初期化
                 need_raceinfo = False
