@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 # 対象アプリ名
 APP_TITLE = "umamusume"
 
-# 基準高さ(タイトルバーを除いた高さ)※ウマ娘の画面キャプチャの高さが1000pxになる。
+# 基準高さ(タイトルバーを除いた高さ)※ウマ娘の画面キャプチャの高さ1000pxになる値。
 GUI_HEIGHT = 968
 
 # CSVファイル名
@@ -22,23 +22,17 @@ RESULTS_FILE_NAME = "race_results.csv"
 IMAGES_FOLDER_PATH = "images"
 
 # CSVのヘッダー
+# 2024-12-29：season（季節）はリザルトに出ないみたいなので削った。
 RESULTS_HEADER = f"create,race_id,position,name,rank,frame_no,plan,\n"
 INFOS_HEADER = f"create,race_id,grade,name,place,surface,distance,direction,weather,condition,timezone\n"
 
-# OpenCVでのMatchTemplate()でのロジック
-CV2_MATCHING_LOGIC = cv2.TM_CCOEFF_NORMED
 
-# リプレイボタンの判定ボーダー
-THRESHOLD_REPLAY = 0.7
-
-# 着順画像の判定ボーダー
-THRESHOLD_POSITION = 0.9
-
-# データフレーム初期化
+# レース情報のデータフレームを初期化
 df_raceinfo = pd.DataFrame(columns=[
     'create', 'race_id', 'grade', 'name', 'place', 'surface', 
     'distance', 'direction', 'weather', 'condition', 'timezone'
 ])
+# 着順情報のデータフレームを初期化
 df_ranking = pd.DataFrame(columns=[
     'create', 'race_id', 'position', 'name', 'rank',
     'frame_no', 'plan'
@@ -46,15 +40,28 @@ df_ranking = pd.DataFrame(columns=[
 
 # レース情報を判定する際の一致率ボーダー
 race_thresholds = {
-    'grade': 0.85, 'name': 0.6, 'season': 0.9, 'place': 0.9,
-    'surface': 0.8, 'distance': 0.64, 'direction': 0.9,
-    'weather': 0.8, 'condition': 0.9, 'timezone': 0.9
+    'grade': 0.9, 'name': 0.85, 'place': 0.93,
+    'surface': 0.9, 'distance': 0.88, 'direction': 0.9,
+    'weather': 0.85, 'condition': 0.93, 'timezone': 0.67
 }
 
 # 着順情報を判定する際の一致率ボーダー
 chara_thresholds = {
-    'name': 0.82, 'rank': 0.8, 'frame_no': 0.85, 'plan': 0.92
+    'name': 0.9, 'rank': 0.75, 'frame_no': 0.9, 'plan': 0.93
 }
+# テンプレート画像を何%小さくするか
+# 2024-12-29：3%よりは5%の方が良さそうだった。
+REDUCTION_RATIO = 0.05
+
+# リプレイボタンの判定ボーダー
+THRESHOLD_REPLAY = 0.85
+
+# 着順画像の判定ボーダー
+THRESHOLD_POSITION = 0.9
+
+# OpenCVでのMatchTemplate()でのロジック
+# 2024-12-29：TM_CCORR_NORMEDはガバすぎた。
+CV2_MATCHING_LOGIC = cv2.TM_CCOEFF_NORMED
 
 # スレッドロック用の変数
 lock = threading.Lock()
@@ -83,6 +90,7 @@ def load_images(folder_name):
             ## RGBで取得させる版
             # img_gray = np.array(img.convert("RGB"))
             # img_rgb = img_gray[..., ::-1]
+
             ## numpyアレイに変換
             img_mask = np.array(img_masked)
 
@@ -243,21 +251,22 @@ class App:
     ###################################################################################################
     def get_MatchingResult(self, img_test, img_temp):
         """テスト画像がテンプレート画像を含むかの結果を返す関数"""
-        # ゲーム画面サイズに合わせてテンプレート画像サイズを調整
+        ## ゲーム画面サイズに合わせてテンプレート画像サイズを調整
         img_temp_new = self.get_new_template(img_temp)
-        # 2つの画像をイコライズ
-        img_test_eq = cv2.equalizeHist(img_test)
-        # 切り取った画像の確認用
+        ## テスト画像をイコライズ
+        # img_test_eq = cv2.equalizeHist(img_test)
+        ## 切り取った画像の確認用
         # cv2.imshow('img_test_eq', img_test_eq)
         # cv2.waitKey(0)
         # cv2.destroyAllWindows()
-        img_temp_new_eq = cv2.equalizeHist(img_temp_new)
-        # 切り取った画像の確認用
+        ## テンプレート画像をイコライズ
+        # img_temp_new_eq = cv2.equalizeHist(img_temp_new)
+        ## 切り取った画像の確認用
         # cv2.imshow('img_temp_new_eq', img_temp_new_eq)
         # cv2.waitKey(0)
         # cv2.destroyAllWindows()
-        # マッチング
-        result = cv2.matchTemplate(img_test_eq, img_temp_new_eq, CV2_MATCHING_LOGIC)
+        ## マッチング
+        result = cv2.matchTemplate(img_test, img_temp_new, CV2_MATCHING_LOGIC)
         return result
     ###################################################################################################
 
@@ -308,11 +317,10 @@ class App:
                     img_mask = None
                     # 切り取る範囲を算出
                     if type_key == "frame_no":
-                        ## 切り取った画像の確認用
-                        # cv2.imshow('img', img_origin)
-                        # cv2.waitKey(0)
-                        # cv2.destroyAllWindows()
+                        # カラー画像の場合はタプルで受ける
+                        # height, width, _ = img_origin.shape
                         height, width = img_origin.shape
+
                         x_start = int(width * 0.30)
                         x_end = int(width * 0.40)
                         img_origin = img_origin[:, x_start:x_end]
@@ -469,9 +477,11 @@ class App:
                 # self.root.update()
 
                 ## 画面の比率を覚えておく
-                # キャプチャ時のウィンドウ高さが1000pxになるサイズを基準にしている
+                # ゲーム画面をキャプチャ時の高さが1000pxになる際の画像をテンプレートにしているため、
+                # ゲーム画面の大きさに合わせてテンプレート画像のサイズを変更するためのもの。
+                # テンプレート画像のサイズは実際のUIより少し小さい方が良いため数%小さくなるようにしている。
                 global zoom_ratio
-                zoom_ratio = window_app.height / GUI_HEIGHT
+                zoom_ratio = window_app.height / GUI_HEIGHT - REDUCTION_RATIO
 
                 # 情報の取得要否フラグを初期化
                 need_raceinfo = False
