@@ -26,7 +26,6 @@ IMAGES_FOLDER_PATH = "images"
 RESULTS_HEADER = f"create,race_id,position,name,rank,frame_no,plan,\n"
 INFOS_HEADER = f"create,race_id,grade,name,place,surface,distance,direction,weather,condition,timezone\n"
 
-
 # レース情報のデータフレームを初期化
 df_raceinfo = pd.DataFrame(columns=[
     'create', 'race_id', 'grade', 'name', 'place', 'surface', 
@@ -137,6 +136,7 @@ class App:
         try:
             window_app = gw.getWindowsWithTitle(APP_TITLE)[0]
             self.root = root
+            self.root.title("UmaRoomaGetter")
             self.root.geometry(f'400x{GUI_HEIGHT}+{window_app.right}+{window_app.top}')
             self.is_running = True
             self.running = True
