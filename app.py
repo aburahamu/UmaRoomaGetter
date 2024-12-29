@@ -23,7 +23,7 @@ IMAGES_FOLDER_PATH = "images"
 
 # CSVのヘッダー
 # 2024-12-29：season（季節）はリザルトに出ないみたいなので削った。
-RESULTS_HEADER = f"create,race_id,position,name,rank,frame_no,plan,\n"
+RESULTS_HEADER = f"create,race_id,position,name,rank,frame_no,plan\n"
 INFOS_HEADER = f"create,race_id,grade,name,place,surface,distance,direction,weather,condition,timezone\n"
 
 # レース情報のデータフレームを初期化
@@ -41,7 +41,7 @@ df_ranking = pd.DataFrame(columns=[
 race_thresholds = {
     'grade': 0.9, 'name': 0.85, 'place': 0.93,
     'surface': 0.9, 'distance': 0.88, 'direction': 0.9,
-    'weather': 0.85, 'condition': 0.93, 'timezone': 0.67
+    'weather': 0.85, 'condition': 0.9, 'timezone': 0.67
 }
 
 # 着順情報を判定する際の一致率ボーダー
@@ -294,12 +294,14 @@ class App:
         """画像の一致を判定する関数"""
         result = self.get_MatchingResult(img, img_temp)
         max_val = np.max(result)
+        ## 判定結果を表示
         # print(f"[rank]{position}【{typ}】{key} = {max_val:.3f}")
         # if typ == "name":
         #     print(f"[rank]{position}【{typ}】{key} = {max_val:.3f}")
         if max_val > threshold:
-            print(f"[rank]{position}【{typ}】{key} = {max_val:.3f}")
-            # 切り取った画像の確認用
+            ## 検知した情報を表示
+            # print(f"[rank]{position}【{typ}】{key} = {max_val:.3f}")
+            ## 切り取った画像の確認用
             # cv2.imshow('img_temp_new', img_temp_new)
             # cv2.waitKey(0)
             # cv2.destroyAllWindows()
@@ -382,7 +384,8 @@ class App:
         """一致する画像が含まれるかを判定する関数"""
         result = self.get_MatchingResult(img, img_temp)
         max_val = np.max(result)
-        print(f"[race]【{typ}】{key} = {max_val:.3f}")
+        ## 判定結果を表示
+        # print(f"[race]【{typ}】{key} = {max_val:.3f}")
         if max_val > threshold:
             self.update_raceDF({typ: key})
 
@@ -508,6 +511,7 @@ class App:
                 if need_raceinfo:
                     img_temp = race_replay['リプレイ'][0]
                     img_mask = race_replay['リプレイ'][1]
+                    # print(f"zoom_ratio = {zoom_ratio}")
                     self.judge_raceinfo(frame, img_temp, img_mask)
 
             except Exception as e:
